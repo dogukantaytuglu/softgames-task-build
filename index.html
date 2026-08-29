@@ -3,135 +3,43 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover">
-    <meta name="description" content="Softgames Assignment by Dogukan Taytuglu">
-    <meta name="theme-color" content="#181327">
-    <title>Softgames Assignment</title>
-    <style>
-      /*
-        This page is a thin shell that only sizes a box and drops Unity's actual canvas
-        (game.html) into it via an iframe (2026-08-29) - it owns zero Unity/loader code
-        itself. See game.html's top-of-file comment for why: two earlier attempts kept
-        Unity's canvas in this same document and tried to prevent its own resize
-        handling (matchWebGLToCanvasSize) from feeding back into whatever CSS/DOM
-        structure sized it, and both still hit a real call-stack-overflow crash on a
-        real iPhone. An iframe is a genuine document boundary - nothing this page's own
-        viewport-height workaround does can be read back by Unity's resize logic, and
-        nothing Unity's resize logic does can feed back into this page's own layout.
-
-        The app is portrait-locked at a 1080x1920 reference resolution, so the job of
-        this page is to hand the iframe a portrait-shaped box at whatever size the
-        viewport can actually afford - never a fixed pixel box.
-      */
-      :root {
-        --ground: #181327;
-        --cream: #fff5d9;
-      }
-
-      * { box-sizing: border-box; }
-
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        /*
-          100% alone is computed once against the viewport at initial paint - on
-          mobile that's before the address bar auto-collapses, so the layout stays
-          sized to the smaller pre-collapse viewport and the top of the page reads
-          as cut off until something forces a reflow (e.g. a manual refresh, which
-          starts from the already-settled chrome state). 100dvh recomputes live as
-          the browser chrome shows/hides; kept as a fallback-supporting second
-          declaration, not a replacement, for browsers without dvh support.
-        */
-        height: 100dvh;
-        overflow: hidden;
-        background: var(--ground);
-        color: var(--cream);
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        /* Stops iOS Safari from bouncing the page behind the iframe on drag. */
-        overscroll-behavior: none;
-        touch-action: none;
-      }
-
-      #unity-container {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        /* Respect notches and gesture bars rather than drawing underneath them. */
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
-
-      /*
-        aspect-ratio + max-width/max-height is the whole responsive story: the frame
-        grows to fill whichever axis runs out first and stays 9:16 either way. On a
-        portrait phone that resolves to the full viewport; on a desktop browser it
-        resolves to a full-height portrait pane centred on the ground colour. This box
-        is sized entirely from this document's own layout - the iframe inside it has no
-        way to influence it.
-      */
-      #unity-frame-wrapper {
-        aspect-ratio: 1080 / 1920;
-        max-width: 100%;
-        max-height: 100%;
-        width: auto;
-        height: 100%;
-        background: var(--ground);
-      }
-
-      /* Wide-but-short windows (a short laptop viewport) hit the width bound first. */
-      @media (max-aspect-ratio: 1080/1920) {
-        #unity-frame-wrapper {
-          width: 100%;
-          height: auto;
-        }
-      }
-
-      #unity-frame {
-        width: 100%;
-        height: 100%;
-        display: block;
-        border: 0;
-      }
-    </style>
+    <title>Unity Web Player | Softgames Assignment</title>
   </head>
-  <body>
-    <div id="unity-container">
-      <div id="unity-frame-wrapper">
-        <iframe id="unity-frame" src="game.html" title="Softgames Assignment" allow="autoplay"></iframe>
-      </div>
-    </div>
-
+  <body style="text-align: center; padding: 0; border: 0; margin: 0;">
+    <canvas id="unity-canvas" width=1920 height=1080 tabindex="-1" style="width: 1920px; height: 1080px; background: #231F20"></canvas>
+    <script src="Build/softgames-task-build.loader.js"></script>
     <script>
-      // iOS WebKit's own viewport metrics (window.innerHeight, visualViewport.height,
-      // even the CSS dvh unit) can be WRONG for a short window right after first paint -
-      // computed against a provisional address-bar/safe-area state that hasn't settled
-      // yet - which reads as the top of the page getting clamped with dead space at the
-      // bottom, self-correcting the instant anything forces a recompute (backgrounding
-      // and returning to the tab is the classic manual trigger). A static CSS height
-      // can't retry once it's wrong, so this drives html/body's height from JS instead
-      // and re-applies it on a short burst of triggers after load to catch WebKit's own
-      // metrics settling asynchronously, not just on later real viewport changes.
-      function applyViewportHeight() {
-        var height = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-        document.documentElement.style.height = height + "px";
-        document.body.style.height = height + "px";
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // Mobile device style: fill the whole browser client area with the game canvas:
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+
+        var canvas = document.querySelector("#unity-canvas");
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        canvas.style.position = "fixed";
+
+        document.body.style.textAlign = "left";
+
       }
-      applyViewportHeight();
-      window.addEventListener("load", applyViewportHeight);
-      window.addEventListener("resize", applyViewportHeight);
-      window.addEventListener("orientationchange", applyViewportHeight);
-      window.addEventListener("pageshow", applyViewportHeight);
-      window.addEventListener("focus", applyViewportHeight);
-      document.addEventListener("visibilitychange", applyViewportHeight);
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", applyViewportHeight);
-      }
-      requestAnimationFrame(function () { requestAnimationFrame(applyViewportHeight); });
-      setTimeout(applyViewportHeight, 300);
-      setTimeout(applyViewportHeight, 1000);
+
+      createUnityInstance(document.querySelector("#unity-canvas"), {
+        arguments: [],
+        dataUrl: "Build/softgames-task-build.data.unityweb",
+        frameworkUrl: "Build/softgames-task-build.framework.js.unityweb",
+        codeUrl: "Build/softgames-task-build.wasm.unityweb",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "Dogukan Taytuglu",
+        productName: "Softgames Assignment",
+        productVersion: "0.1.0",
+        // matchWebGLToCanvasSize: false, // Uncomment this to separately control WebGL canvas render size and DOM element size.
+        // devicePixelRatio: 1, // Uncomment this to override low DPI rendering on high DPI displays.
+      }).then((unityInstance) => {
+      }).catch((message) => {
+        alert(message);
+      });
     </script>
   </body>
 </html>
