@@ -167,12 +167,25 @@
       var progressFill = document.querySelector("#unity-progress-fill");
       var loadingHint = document.querySelector("#unity-loading-hint");
 
-      // Unity's own WebGL runtime already keeps the render buffer synced to the canvas's
-      // CSS-scaled display box via matchWebGLToCanvasSize (on by default - confirmed live
-      // in the shipped framework.js, nothing here needs to override it). An earlier custom
-      // ResizeObserver duplicating that same job was removed (2026-08-29): two independent
-      // writers to canvas.width/height on every resize is exactly the kind of race that
-      // caused live window resizes to stop updating reliably.
+      // Unity's stock WebGL loader never resizes the canvas's actual render buffer to
+      // track its CSS-scaled display box - Player Settings' Default Canvas Width/Height
+      // bakes a fixed backing resolution at build time and nothing updates it afterward.
+      // Without this, every device renders into that same fixed-size buffer and the
+      // browser just stretches the result to fit the CSS box, so the game never actually
+      // renders at a monitor's/device's real resolution. ResizeObserver on the canvas
+      // itself catches every case that changes its displayed size (window resize,
+      // orientation change, safe-area insets, the height fix below), not just a plain
+      // window "resize" event.
+      function syncCanvasResolution() {
+        var dpr = window.devicePixelRatio || 1;
+        var width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+        var height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+      }
+      new ResizeObserver(syncCanvasResolution).observe(canvas);
 
       // iOS Safari's own viewport metrics (window.innerHeight, visualViewport.height,
       // even the CSS dvh unit) can be WRONG for a short window right after first paint -
@@ -188,6 +201,7 @@
         var height = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
         document.documentElement.style.height = height + "px";
         document.body.style.height = height + "px";
+        syncCanvasResolution();
       }
       applyViewportHeight();
       window.addEventListener("load", applyViewportHeight);
