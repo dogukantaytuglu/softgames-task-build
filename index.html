@@ -9,16 +9,23 @@
     <title>Softgames Assignment</title>
     <style>
       /*
+        This page is a thin shell that only sizes a box and drops Unity's actual canvas
+        (game.html) into it via an iframe (2026-08-29) - it owns zero Unity/loader code
+        itself. See game.html's top-of-file comment for why: two earlier attempts kept
+        Unity's canvas in this same document and tried to prevent its own resize
+        handling (matchWebGLToCanvasSize) from feeding back into whatever CSS/DOM
+        structure sized it, and both still hit a real call-stack-overflow crash on a
+        real iPhone. An iframe is a genuine document boundary - nothing this page's own
+        viewport-height workaround does can be read back by Unity's resize logic, and
+        nothing Unity's resize logic does can feed back into this page's own layout.
+
         The app is portrait-locked at a 1080x1920 reference resolution, so the job of
-        this page is to hand Unity a portrait-shaped canvas at whatever size the
-        viewport can actually afford - never a fixed pixel box. Unity's stock template
-        hard-codes 960x600 on desktop, which puts a portrait app inside a landscape
-        letterbox and shrinks every screen; that is the specific thing this replaces.
+        this page is to hand the iframe a portrait-shaped box at whatever size the
+        viewport can actually afford - never a fixed pixel box.
       */
       :root {
         --ground: #181327;
         --cream: #fff5d9;
-        --ink: #2a2140;
       }
 
       * { box-sizing: border-box; }
@@ -42,7 +49,7 @@
         background: var(--ground);
         color: var(--cream);
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        /* Stops iOS Safari from bouncing the page behind the canvas on drag. */
+        /* Stops iOS Safari from bouncing the page behind the iframe on drag. */
         overscroll-behavior: none;
         touch-action: none;
       }
@@ -58,150 +65,54 @@
       }
 
       /*
-        aspect-ratio + max-width/max-height is the whole responsive story: the wrapper
+        aspect-ratio + max-width/max-height is the whole responsive story: the frame
         grows to fill whichever axis runs out first and stays 9:16 either way. On a
         portrait phone that resolves to the full viewport; on a desktop browser it
-        resolves to a full-height portrait pane centred on the ground colour.
-
-        This constraint lives on a plain wrapper div, not on #unity-canvas itself,
-        deliberately (2026-08-29): Unity's own WebGL runtime continuously rewrites the
-        canvas's width/height content attributes to match its CSS size
-        (matchWebGLToCanvasSize). A canvas is a replaced element, and some WebKit
-        versions don't fully decouple its CSS-computed box from those attributes - so
-        putting aspect-ratio directly on the canvas made it both the sizing authority
-        and the thing being resized, and the two fed back into each other until the
-        call stack overflowed (RangeError, reproduced on a real iPhone). A div has no
-        such content-driven intrinsic size, so it can't feed back into anything Unity
-        writes.
+        resolves to a full-height portrait pane centred on the ground colour. This box
+        is sized entirely from this document's own layout - the iframe inside it has no
+        way to influence it.
       */
-      #unity-canvas-wrapper {
+      #unity-frame-wrapper {
         aspect-ratio: 1080 / 1920;
         max-width: 100%;
         max-height: 100%;
         width: auto;
         height: 100%;
+        background: var(--ground);
       }
 
       /* Wide-but-short windows (a short laptop viewport) hit the width bound first. */
       @media (max-aspect-ratio: 1080/1920) {
-        #unity-canvas-wrapper {
+        #unity-frame-wrapper {
           width: 100%;
           height: auto;
         }
       }
 
-      #unity-canvas {
+      #unity-frame {
         width: 100%;
         height: 100%;
         display: block;
-        background: var(--ground);
-        /* Unity draws its own cursor logic; keep the browser from fighting it. */
-        touch-action: none;
-      }
-
-      #unity-loading {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 18px;
-        background: var(--ground);
-        transition: opacity 240ms ease;
-      }
-
-      #unity-loading.hidden {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      #unity-loading-title {
-        font-size: clamp(18px, 4vw, 28px);
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        color: var(--cream);
-      }
-
-      #unity-progress-track {
-        width: min(280px, 60vw);
-        height: 8px;
-        border-radius: 999px;
-        background: rgba(255, 245, 217, 0.16);
-        overflow: hidden;
-      }
-
-      #unity-progress-fill {
-        width: 0%;
-        height: 100%;
-        border-radius: 999px;
-        background: var(--cream);
-        transition: width 120ms linear;
-      }
-
-      #unity-loading-hint {
-        font-size: 13px;
-        opacity: 0.55;
-        letter-spacing: 0.02em;
-      }
-
-      #unity-warning {
-        position: fixed;
-        left: 50%;
-        top: 16px;
-        transform: translateX(-50%);
-        z-index: 10;
-        max-width: min(560px, 90vw);
-      }
-
-      #unity-warning > div {
-        margin-bottom: 8px;
-        padding: 10px 14px;
-        border-radius: 8px;
-        font-size: 14px;
-        line-height: 1.4;
-        color: var(--ink);
+        border: 0;
       }
     </style>
   </head>
   <body>
     <div id="unity-container">
-      <div id="unity-canvas-wrapper">
-        <canvas id="unity-canvas" width="1080" height="1920" tabindex="-1"></canvas>
+      <div id="unity-frame-wrapper">
+        <iframe id="unity-frame" src="game.html" title="Softgames Assignment" allow="autoplay"></iframe>
       </div>
     </div>
 
-    <div id="unity-loading">
-      <div id="unity-loading-title">Softgames Assignment</div>
-      <div id="unity-progress-track"><div id="unity-progress-fill"></div></div>
-      <div id="unity-loading-hint">Loading…</div>
-    </div>
-
-    <div id="unity-warning"></div>
-
     <script>
-      var canvas = document.querySelector("#unity-canvas");
-      var loading = document.querySelector("#unity-loading");
-      var progressFill = document.querySelector("#unity-progress-fill");
-      var loadingHint = document.querySelector("#unity-loading-hint");
-
-      // Unity's own WebGL runtime already keeps the render buffer synced to the canvas's
-      // CSS-scaled display box via matchWebGLToCanvasSize (on by default - confirmed live
-      // in the shipped framework.js, nothing here needs to override it). A custom
-      // ResizeObserver duplicating that same job was tried and removed (2026-08-29): two
-      // independent writers to canvas.width/height on every resize raced each other badly
-      // enough to blow the call stack (RangeError: Maximum call stack size exceeded,
-      // reproduced on a real iPhone) as well as breaking live window resize on PC.
-
-      // iOS Safari's own viewport metrics (window.innerHeight, visualViewport.height,
+      // iOS WebKit's own viewport metrics (window.innerHeight, visualViewport.height,
       // even the CSS dvh unit) can be WRONG for a short window right after first paint -
-      // computed against a provisional address-bar/safe-area state that Safari hasn't
-      // settled yet - which reads as exactly this bug: content clamped from the top with
-      // dead space at the bottom, self-correcting the instant anything forces Safari to
-      // recompute (backgrounding and returning to the tab is the classic manual trigger,
-      // which is why "losing focus and coming back" fixes it). A static CSS height can't
-      // retry once it's wrong, so this drives html/body's height from JS instead and
-      // re-applies it on a short burst of triggers after load to catch Safari's own
+      // computed against a provisional address-bar/safe-area state that hasn't settled
+      // yet - which reads as the top of the page getting clamped with dead space at the
+      // bottom, self-correcting the instant anything forces a recompute (backgrounding
+      // and returning to the tab is the classic manual trigger). A static CSS height
+      // can't retry once it's wrong, so this drives html/body's height from JS instead
+      // and re-applies it on a short burst of triggers after load to catch WebKit's own
       // metrics settling asynchronously, not just on later real viewport changes.
       function applyViewportHeight() {
         var height = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
@@ -221,63 +132,6 @@
       requestAnimationFrame(function () { requestAnimationFrame(applyViewportHeight); });
       setTimeout(applyViewportHeight, 300);
       setTimeout(applyViewportHeight, 1000);
-
-      function unityShowBanner(msg, type) {
-        var warningBanner = document.querySelector("#unity-warning");
-        function updateBannerVisibility() {
-          warningBanner.style.display = warningBanner.children.length ? "block" : "none";
-        }
-        var div = document.createElement("div");
-        div.innerHTML = msg;
-        warningBanner.appendChild(div);
-        if (type == "error") {
-          div.style.background = "#ff6b6b";
-        } else {
-          if (type == "warning") div.style.background = "#ffd166";
-          setTimeout(function () {
-            if (div.parentNode) warningBanner.removeChild(div);
-            updateBannerVisibility();
-          }, 5000);
-        }
-        updateBannerVisibility();
-      }
-
-      var buildUrl = "Build";
-      var loaderUrl = buildUrl + "/softgames-task-build.loader.js";
-      var config = {
-        arguments: [],
-        dataUrl: buildUrl + "/softgames-task-build.data.unityweb",
-        frameworkUrl: buildUrl + "/softgames-task-build.framework.js.unityweb",
-        codeUrl: buildUrl + "/softgames-task-build.wasm.unityweb",
-        streamingAssetsUrl: "StreamingAssets",
-        companyName: "Dogukan Taytuglu",
-        productName: "Softgames Assignment",
-        productVersion: "0.1.0",
-        showBanner: unityShowBanner,
-      };
-
-      var script = document.createElement("script");
-      script.src = loaderUrl;
-      script.onload = () => {
-        createUnityInstance(canvas, config, (progress) => {
-          progressFill.style.width = 100 * progress + "%";
-        })
-          .then(() => {
-            loading.classList.add("hidden");
-            setTimeout(() => { loading.style.display = "none"; }, 260);
-          })
-          .catch((message) => {
-            loadingHint.textContent = message;
-            loadingHint.style.opacity = "1";
-            unityShowBanner(message, "error");
-          });
-      };
-      script.onerror = () => {
-        loadingHint.textContent = "Could not load the game files.";
-        loadingHint.style.opacity = "1";
-      };
-
-      document.body.appendChild(script);
     </script>
   </body>
 </html>
