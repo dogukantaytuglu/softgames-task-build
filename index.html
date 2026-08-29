@@ -167,25 +167,15 @@
       var progressFill = document.querySelector("#unity-progress-fill");
       var loadingHint = document.querySelector("#unity-loading-hint");
 
-      // Belt-and-suspenders for the mobile address-bar-collapse timing bug (see the
-      // height:100dvh comment above): browsers without dvh support get an explicit
-      // resize whenever the actual visible area changes, so layout can't get stuck
-      // sized to a stale pre-collapse viewport.
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", () => {
-          document.documentElement.style.height = window.visualViewport.height + "px";
-        });
-      }
-
       // Unity's stock WebGL loader never resizes the canvas's actual render buffer to
       // track its CSS-scaled display box - Player Settings' Default Canvas Width/Height
-      // bakes a fixed backing resolution at build time (960x600, an unrelated landscape
-      // default) and nothing updates it afterward. Without this, every device renders
-      // into that same fixed-size buffer and the browser just stretches the result to
-      // fit the CSS box, so the game never actually renders at a monitor's/device's real
-      // resolution. ResizeObserver on the canvas itself catches every case that changes
-      // its displayed size (window resize, orientation change, safe-area insets), not
-      // just a plain window "resize" event.
+      // bakes a fixed backing resolution at build time and nothing updates it afterward.
+      // Without this, every device renders into that same fixed-size buffer and the
+      // browser just stretches the result to fit the CSS box, so the game never actually
+      // renders at a monitor's/device's real resolution. ResizeObserver on the canvas
+      // itself catches every case that changes its displayed size (window resize,
+      // orientation change, safe-area insets, the height fix below), not just a plain
+      // window "resize" event.
       function syncCanvasResolution() {
         var dpr = window.devicePixelRatio || 1;
         var width = Math.max(1, Math.round(canvas.clientWidth * dpr));
@@ -195,8 +185,37 @@
           canvas.height = height;
         }
       }
-      syncCanvasResolution();
       new ResizeObserver(syncCanvasResolution).observe(canvas);
+
+      // iOS Safari's own viewport metrics (window.innerHeight, visualViewport.height,
+      // even the CSS dvh unit) can be WRONG for a short window right after first paint -
+      // computed against a provisional address-bar/safe-area state that Safari hasn't
+      // settled yet - which reads as exactly this bug: content clamped from the top with
+      // dead space at the bottom, self-correcting the instant anything forces Safari to
+      // recompute (backgrounding and returning to the tab is the classic manual trigger,
+      // which is why "losing focus and coming back" fixes it). A static CSS height can't
+      // retry once it's wrong, so this drives html/body's height from JS instead and
+      // re-applies it on a short burst of triggers after load to catch Safari's own
+      // metrics settling asynchronously, not just on later real viewport changes.
+      function applyViewportHeight() {
+        var height = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        document.documentElement.style.height = height + "px";
+        document.body.style.height = height + "px";
+        syncCanvasResolution();
+      }
+      applyViewportHeight();
+      window.addEventListener("load", applyViewportHeight);
+      window.addEventListener("resize", applyViewportHeight);
+      window.addEventListener("orientationchange", applyViewportHeight);
+      window.addEventListener("pageshow", applyViewportHeight);
+      window.addEventListener("focus", applyViewportHeight);
+      document.addEventListener("visibilitychange", applyViewportHeight);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", applyViewportHeight);
+      }
+      requestAnimationFrame(function () { requestAnimationFrame(applyViewportHeight); });
+      setTimeout(applyViewportHeight, 300);
+      setTimeout(applyViewportHeight, 1000);
 
       function unityShowBanner(msg, type) {
         var warningBanner = document.querySelector("#unity-warning");
