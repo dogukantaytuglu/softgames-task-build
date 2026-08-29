@@ -150,7 +150,7 @@
   </head>
   <body>
     <div id="unity-container">
-      <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
+      <canvas id="unity-canvas" width="1080" height="1920" tabindex="-1"></canvas>
     </div>
 
     <div id="unity-loading">
@@ -176,6 +176,27 @@
           document.documentElement.style.height = window.visualViewport.height + "px";
         });
       }
+
+      // Unity's stock WebGL loader never resizes the canvas's actual render buffer to
+      // track its CSS-scaled display box - Player Settings' Default Canvas Width/Height
+      // bakes a fixed backing resolution at build time (960x600, an unrelated landscape
+      // default) and nothing updates it afterward. Without this, every device renders
+      // into that same fixed-size buffer and the browser just stretches the result to
+      // fit the CSS box, so the game never actually renders at a monitor's/device's real
+      // resolution. ResizeObserver on the canvas itself catches every case that changes
+      // its displayed size (window resize, orientation change, safe-area insets), not
+      // just a plain window "resize" event.
+      function syncCanvasResolution() {
+        var dpr = window.devicePixelRatio || 1;
+        var width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+        var height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
+      }
+      syncCanvasResolution();
+      new ResizeObserver(syncCanvasResolution).observe(canvas);
 
       function unityShowBanner(msg, type) {
         var warningBanner = document.querySelector("#unity-warning");
